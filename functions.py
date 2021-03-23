@@ -4,6 +4,8 @@ Created on Tue Jan 12 00:02:36 2021
 
 @author: khaik
 """
+import os, json, requests, pickle
+import numpy as np
 
 def hex_to_RGB(hex):
   ''' "#FFFFFF" -> [255,255,255] '''
@@ -46,3 +48,34 @@ def linear_gradient(start_hex, finish_hex="#FFFFFF", n=10):
     RGB_list.append(curr_vector)
 
   return color_dict(RGB_list)
+
+def getAPI(url):
+    response = requests.get(url)
+    if response.status_code != 200:
+        raise Exception('oops')
+    return response.json()
+
+def jprint(data):
+    print(json.dumps(data, sort_keys=True, indent=4))
+    
+
+def savecsv(save_path, filenames, files, ftype='array', 
+            save_index=False, label=None):
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    
+    if ftype=='array':
+        [np.savetxt(os.path.join(save_path, filenames[i]), files[i], delimiter=",") for i in range(len(filenames))];
+
+    elif ftype=='dataframe': 
+        [files[i].to_csv(os.path.join(save_path, filenames[i]), index=save_index, index_label=label) for i in range(len(filenames))];
+
+
+def savepickle(save_path, filenames, files):
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    
+    for i in range(len(filenames)):
+        filename=os.path.join(save_path,filenames[i])
+        with open(filename, 'wb') as f:
+            pickle.dump(files[i], f)
