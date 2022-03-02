@@ -25,14 +25,17 @@ import functions as fn
 
 #estimate population -- need to make this more flexible so that it works when OP adds new data
 #fpopn needs to be array
+#n is first month - jul (eg. if looking at data from dec 2016 to nov 2021, n = 12-7=5)
 def getPopn(n, save=False):
-    popn = [54786300, 55268100, 55619400, 55977200, 56287000]
+    popn = [55268100, 55619400, 55977200, 56287000, 56550000] #jul2016-20
+    y1 = 16
     months = np.arange(0,12*len(popn),12)
     f = interp1d(months, popn, fill_value='extrapolate', kind='quadratic')
     estpopn = f(np.arange((len(popn)+1)*12))
     fpopn = estpopn[n:n+60]
 
-    labels = ['Jul 15', 'Jan 16', 'Jul 16', 'Jan 17', 'Jul 17', 'Jan 18', 'Jul 18', 'Jan 19', 'Jul 19', 'Jan 20', 'Jul 20', 'Jan 21']
+    labels = ['Jul '+str(y1), 'Jan '+str(y1+1), 'Jul '+str(y1+1), 'Jan '+str(y1+2), 'Jul '+str(y1+2), 'Jan '+str(y1+3), 
+              'Jul '+str(y1+3), 'Jan '+str(y1+4), 'Jul '+str(y1+4), 'Jan '+str(y1+5), 'Jul '+str(y1+5), 'Jan '+str(y1+6)]
 
     fig, ax = plt.subplots()
     ax.plot(estpopn, label='Extrapolated population')
@@ -45,6 +48,7 @@ def getPopn(n, save=False):
     ax.set_ylabel('Population')
     ax.set_title('Extrapolated population from England Mid-Year Population Estimates')
     plt.show()
+    fig.savefig(str("1 time series/population estimates.png"))
     
     if save:
         fn.savecsv('1 time series/', ['popn.csv', 'popn_full.csv'], [fpopn, estpopn])
@@ -58,15 +62,19 @@ TIME SERIES by drug name -- ok
 2. Cost/1000 popn normalised with inflation
 3. (Maybe) quantity...? whatever this means..
 '''
-def plotTimeSeries(y, nmonths, xstart=0, ylabel='', title='', exclude_amtt=False):
+def plotTimeSeries(y, nmonths, xstart=2, ylabel='', title='', exclude_amtt=False):
     x = np.arange(nmonths)
     ntca = 11 if exclude_amtt else 12        
     col = np.concatenate([fn.linear_gradient('#393b79', '#9c9ede', n=ntca)['hex'], 
                         fn.linear_gradient('#637939', '#cedb9c', n=4)['hex'],
                         fn.linear_gradient('#8c6d31', '#e7cd94', n=7)['hex'], 
                         fn.linear_gradient('#843c39', '#e7969c', n=10)['hex']])
-    labels = ['Jan 16', 'Jul 16', 'Jan 17', 'Jul 17', 'Jan 18', 'Jul 18', 'Jan 19', 'Jul 19', 'Jan 20', 'Jul 20']
-    xticks = np.arange(xstart,nmonths,6)
+    labels = ['Mar 16', 'Jun 16', 'Sep 16', 'Dec 16',
+              'Mar 17', 'Jun 17', 'Sep 17', 'Dec 17',
+              'Mar 18', 'Jun 18', 'Sep 18', 'Dec 18',
+              'Mar 19', 'Jun 19', 'Sep 19', 'Dec 19',
+              'Mar 20', 'Jun 20', 'Sep 20', 'Dec 20']
+    xticks = np.arange(xstart,nmonths,3)
     if exclude_amtt:
         legends = ['_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', 'TCAs', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', 
                    '_nolegend_', '_nolegend_', 'MAOIs', '_nolegend_', 
@@ -78,7 +86,7 @@ def plotTimeSeries(y, nmonths, xstart=0, ylabel='', title='', exclude_amtt=False
                    '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', 'SSRIs', '_nolegend_', '_nolegend_',
                    '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', 'Others', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', ]
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(1, figsize=(15,8))
     ax.stackplot(x,y, colors=col, labels=legends)
     ax.set_xticks(xticks)
     ax.set_xticklabels(labels, rotation=45)
@@ -87,6 +95,26 @@ def plotTimeSeries(y, nmonths, xstart=0, ylabel='', title='', exclude_amtt=False
     ax.set_title(title)
     ax.legend(loc='upper left')
     fig.savefig(str("1 time series/"+ylabel+".png"))
+
+def plotSeasonalVariation(y, ylabel='', title=''):
+    ysum = np.sum(y, axis=0)
+    labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    xticks = np.arange(12)
+    legends = [str(i) for i in np.arange(2016,2021)]
+
+    fig, ax = plt.subplots(1, figsize=(15,8))
+    for i in range(5):
+        ax.plot(np.arange(12),ysum[i*12:i*12+12], label=legends[i])
+    
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(labels, rotation=45)
+    ax.set_xlabel('Date')
+    ax.set_ylabel(str('Total '+ylabel))
+    ax.set_title(str('Total '+title))
+    ax.legend(loc='upper left')
+    fig.savefig(str("1 time series/"+ylabel+"_seasons.png"))
+    
 
 def plotTimeSeries_line(y, nmonths, xstart=0, ylabel='', title='', exclude_amtt=False):
     x = np.arange(nmonths)
@@ -143,11 +171,13 @@ def time_series_by_drug(n=6, save=False, exclude_amtt=False):
         
     for b in baddrug:
         by_drugs = [item for item in by_drugs if item['id']!=b]
+        
+    fn.savepickle('1 time series', ['by_drugs.pickle'], [by_drugs])
     
     #ITEM normalise by 1000 popn   and COST normalise by 1000 popn + inflation
     with open('CPI_index.pickle', 'rb') as f:
         cpi_index = pickle.load(f)
-    cpi_index = np.array([x/cpi_index[0] for x in cpi_index])
+    cpi_index = np.array([x/cpi_index[-1] for x in cpi_index])
             
     yItems, yCost, yQuantity = [], [], []
     for a in by_drugs:
@@ -161,12 +191,16 @@ def time_series_by_drug(n=6, save=False, exclude_amtt=False):
     nItems = yItems/fpopn
     nCost = (yCost/fpopn)/cpi_index
     nQuantity = yQuantity/fpopn
+    tItems = np.sum(nItems, axis=0)
+    tCost = np.sum(nCost, axis=0)
+    tQuantity = np.sum(nQuantity, axis=0)
     
     var = [nItems, nCost, nQuantity]
     ylabels = ['Number of prescriptions issued','Cost','Amount of drug prescribed']
     titles = [str(y+'/1000 popn') for y in ylabels]
     
-    [plotTimeSeries(var[i], nmonths, ylabel=ylabels[i], title=titles[i], exclude_amtt=exclude_amtt) for i in range(3)]
+    [plotTimeSeries(var[i], nmonths, ylabel=ylabels[i], title=titles[i], exclude_amtt=exclude_amtt) for i in range(3)];
+    [plotSeasonalVariation(var[i], ylabel=ylabels[i], title=titles[i]) for i in range(3)];
     
     if save:
         filenames = ['cpi_index.csv', 'items_original.csv', 'cost_original.csv', 'quantity_original.csv',
@@ -261,7 +295,7 @@ def map_date(datestr, firstdate=datetime(2016,1,1)):
     d2 = datetime.strptime(datestr,'%Y-%m-%d')
     return (d2.year - d1.year) * 12 + d2.month - d1.month
 
-def plotCcgPerf_anim(by_ccgs_dict, map_df, column, ind, timeperiod=timeperiod):
+def plotCcgPerf_anim(by_ccgs_dict, map_df, column, ind, timeperiod):
     fig, ax = plt.subplots(1, figsize=(10,10))
     def plotMap(i):
         ax.clear()
@@ -278,7 +312,7 @@ def plotCcgPerf_anim(by_ccgs_dict, map_df, column, ind, timeperiod=timeperiod):
     filename=os.path.join(save_path,str(column+'.gif'))
     animator.save(filename, writer=writergif)
     
-def plotCcgHist(by_ccgs_dict, cols, ind, timeperiod=timeperiod):
+def plotCcgHist(by_ccgs_dict, cols, ind, timeperiod):
     a = []
     fig, axs = plt.subplots(2,2, figsize=(12,10))
     axs = axs.ravel()
@@ -311,7 +345,7 @@ def ccg_profile_1(n=3, animation=False, save=False, excl_amtt=True, hist_return=
         
     with open('CPI_index.pickle', 'rb') as f:
         cpi_index = pickle.load(f)
-    cpi_index = np.array([x/cpi_index[0] for x in cpi_index])
+    cpi_index = np.array([x/cpi_index[-1] for x in cpi_index])
 
     
     fp = "CCG_boundaries\Clinical_Commissioning_Groups__April_2020__EN_BUC.shp"
@@ -378,7 +412,7 @@ def ccg_profile_1(n=3, animation=False, save=False, excl_amtt=True, hist_return=
     cols = ['items', 'spending', 'quantity', 'list_size']
     
     #histogram - what to do with outliers?
-    hist_summary = plotCcgHist(by_ccgs_dict, cols, -1)
+    hist_summary = plotCcgHist(by_ccgs_dict, cols, -1, timeperiod)
     
     #plot map
     if animation:    
@@ -420,6 +454,17 @@ def check_SSRI(by_ccgs1, listsize_ccg, Cdict, Qdict, drugcode=21, ndrugs=32):
     
 '''
 CORRELATION ANALYSIS data (by practice) --  ok
+
+RURALITY
+1 - mainly rural (>= 80%)
+2 - largely rural (50-79%)
+3 - urban w significant rural (26-49%)
+4 - urban w city and town
+5 - urban with minor conurbation
+6 - urban with major conurbation
+Some CCGs contain LADs of different rurality - how to combine? now taking simple mean
+
+# For the purpose of this analysis (quintiles), combine 5+6 as one class
 
 FINGERTIPS
 ftp.get_all_profiles() -- match ID to profiles (PHOF (19), GP (20), GP_supporting (21))
@@ -475,10 +520,10 @@ def summary(data, depvar, dropna=False):
 def quintile_summary(data, depvar):
     varcol = ['Variable', 'Qmin', 'Qmax']+[str('Med_'+var) for var in depvar]
     qs_df = pd.DataFrame(columns = varcol)
-    qs_df['Variable'] = [col+str(i+1) for col in data.columns[4:] for i in range(5)]
+    qs_df['Variable'] = [col+str(i+1) for col in data.columns[5:] for i in range(5)]
 
     n=0
-    for col in data.columns[4:11]:
+    for col in data.columns[5:12]:
         data['q']=pd.qcut(data[col], 5, labels=False)
         for i in range(5):
             df = data[depvar+[col]].loc[data['q']==i]
@@ -487,10 +532,6 @@ def quintile_summary(data, depvar):
         n+=5
         
     return qs_df
-
-col='list_size'
-data['q']=pd.qcut(data[col], 5, labels=False)
-df = data[depvar+[col]].loc[data['q']==0]
 
 def check_Qdict(Qdict):
     a = []
@@ -505,15 +546,68 @@ def check_Qdict(Qdict):
     print("Potential GP closures: %d" %(len(ind)), end='\n')
     return np.array((ind, nzero))
 
+def get_ruralInd(L2C2021='2 model/LAD_to_CCG_2021.csv', L2R2011='2 model/LAD_rurality_2011.ods'):
+    ladCcg = pd.read_csv(L2C2021)
+    ccg_to_lad = ladCcg.groupby('CCG21CDH').LAD21CD.apply(list).to_dict()     
+    for key, value in ccg_to_lad.items():
+        ccg_to_lad[key] = set(value)
+    
+    # map 2011 LAD to 2021 LAD   
+    ladRural = pd.read_excel(L2R2011, engine='odf')
+    lad_to_rural = dict(zip(ladRural.LAD11CD, ladRural.RUC11CD))
+    del lad_to_rural[np.nan]
+    lad21_11_dict = {'E06000058': ['E06000028', 'E06000029', 'E07000048'],
+                     'E06000057': ['E06000048'],
+                     'E06000060': ['E07000004', 'E07000005', 'E07000006', 'E07000007'],
+                     'E06000059': ['E07000049', 'E07000050', 'E07000051', 'E07000052', 'E07000053'],
+                     'E07000242': ['E07000097'],
+                     'E07000240': ['E07000100'],
+                     'E07000243': ['E07000101'],
+                     'E07000241': ['E07000104'],
+                     'E06000061': ['E07000150', 'E07000153', 'E07000152', 'E07000156'],
+                     'E06000062': ['E07000151', 'E07000154', 'E07000155'],
+                     'E07000246': ['E07000190', 'E07000191'],
+                     'E07000244': ['E07000206', 'E07000205'],
+                     'E07000245': ['E07000201', 'E07000204'],
+                     'E08000037': ['E08000020']}
+    
+    for key, value in lad21_11_dict.items():
+        i = 0
+        for v in value:
+            i += lad_to_rural[v]
+            del lad_to_rural[v]
+        lad_to_rural[key] = i/len(value)
+
+    strangeLADs = []  # should be empty
+    for key, value in ccg_to_lad.items():
+        count = 0
+        for i in value:
+            if i not in lad_to_rural.keys():
+                strangeLADs.append(i)
+            else:
+                count += lad_to_rural[i]
+            rural_ind = count/len(value)
+        ccg_to_lad[key] = rural_ind
+    
+    return ccg_to_lad
+    
+
 # need to adjust for inflation?? since it's only within 1 year. if adjust_inflation==True, adjust with ref to 2016
-year=2019
+year=2021
 def getData(year, depvar=['items', 'actual_cost', 'quantity'], 
             save=True, excl_amtt=True, adjust_inflation=False,
             dropna=False):
     
     ystr=str(year)
-    datelist = ['01','02','03','04','05','06','07','08','09','10','11','12']
+    #datelist = ['01','02','03','04','05','06','07','08','09','10','11','12']
     
+    datelist = [ystr+'-'+x for x in ['01','02','03','04','05','06','07','08','09','10','11']]
+    datelist.insert(0,'2020-12')
+    
+    l1 = ['2020-' + x for x in ['03','04','05','06','07','08','09','10','11','12']]
+    l2 = ['2021-' + x for x in ['01','02','03','04','05','06','07','08','09','10','11']]
+    datelist = l1+l2
+                
     with open('druglist.json', 'r') as f:
         druglist = json.load(f)
     if excl_amtt:
@@ -522,12 +616,12 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
         [druglist.remove(x) for x in ['0403030Y0']];
         
     with open('CPI_index.pickle', 'rb') as f:
-        cpi_index = pickle.load(f)
+        cpi_index = pickle.load(f)    
     cpi_index = np.array([x/cpi_index[0] for x in cpi_index])
     ind = np.arange(0,12)+((year-2016)*12)
     cpi_index = cpi_index[ind]
     
-    if 2015<year<=2020:
+    if year>2015:
         imd_year=2019
     elif 2010<year<=2015:
         imd_year=2015
@@ -540,7 +634,7 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
     data = fn.getAPI(url)
     listsize_gp = {}
     for sub in data:
-        if sub['date'][:4] == ystr:
+        if sub['date'][:7] in datelist:
             if sub['row_id'] in listsize_gp:
                 listsize_gp[sub['row_id']].append(sub['total_list_size'])
             else:
@@ -548,19 +642,19 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
     
     exclude = []            
     for key, value in listsize_gp.items():
-        if len(value)<12:
+        if len(value)<len(datelist):
             exclude.append(key)
     [listsize_gp.pop(key,None) for key in exclude];
     
     nvar, ndate, ndrug, kgp = len(depvar), len(datelist), len(druglist), list(listsize_gp.keys())
     Qdict = {k : np.zeros((nvar, ndrug, ndate)) for k in kgp}
     Cdict = {k : 0 for k in kgp}
-    drugcount=1
+    drugcount=0
     for i in range(ndrug):
         drugcode = druglist[i]
         for j in range(ndate):
             date = datelist[j]
-            url = "https://openprescribing.net/api/1.0/spending_by_practice/?code=" + drugcode + "&date=" + ystr + "-" + date + "-01&format=json"
+            url = "https://openprescribing.net/api/1.0/spending_by_practice/?code=" + drugcode + "&date=" + date + "-01&format=json"
             data = fn.getAPI(url)
             for sub in data:
                 key = sub['row_id']
@@ -574,6 +668,23 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
         
     print('Qdict done', end=' ')
     
+    ccg_to_lad = get_ruralInd()
+    ccg_exc = list(set(list(Cdict.values()))-set(list(ccg_to_lad.keys())))
+    
+    # check gps with no ccg label
+    ccg_label = []
+    for key, value in Cdict.items():
+        if value == 0 or value in ccg_exc:
+            ccg_label.append(key)
+
+    # modify ccg_label if necessary    
+    for k in ccg_label:
+        del listsize_gp[k]
+        del Cdict[k]
+        del Qdict[k]
+    kgp = list(listsize_gp.keys())
+        
+    # calculate annual mean after normalising by list_size, inflation 
     Mdict = {k : np.zeros(3) for k in kgp}
     for key, value in Qdict.items():
         norm_value = (value/listsize_gp[key])*1000
@@ -581,14 +692,17 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
         Mdict[key] = np.nanmean(norm_value, axis=(1,2))
         
     z = check_Qdict(Qdict)      #remove??
-    
+
+    # map CCG and rurality - code needs polishing
     ind_df = pd.DataFrame.from_dict(Mdict, orient='index', columns=depvar)
-    ind_df['ccg'] = ind_df.index.to_series().map(Cdict)
-    ind_df = ind_df[['ccg']+depvar]
+    ind_df.insert(0,'ccg', ind_df.index.to_series().map(Cdict))
+    ind_df['rul'] = ind_df['ccg']
+    ind_df = ind_df.replace({"rul": ccg_to_lad})
     
     ind = [295,93553,114,336,351,848,90646]
     keys = ['QOF', 'IMD', 'List Size', '% 65+', '% Long-term Health Conditions', '% Depression', '% New Depression']
-    tp = ystr+'/'+str(year+1)[2:]
+    tp = str(year-1)+'/'+ystr[2:]   #check year
+    #tp = ystr+'/'+str(year+1)[2:]   #check year
     
     for i in range(len(ind)):
         if ind[i] == 114:
@@ -601,12 +715,16 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
                 df2 = df.loc[(df['Area Type'] == 'GP') & (df['Time period'] == year)][['Area Code','Value']]
             elif ind[i] == 93553:
                 df2 = df.loc[(df['Area Type'] == 'GP') & (df['Time period'] == imd_year)][['Area Code','Value']]
+            elif ind[i] == 90646:
+            	df2 = df.loc[(df['Area Type'] == 'GP') & (df['Time period'] == tp) & (df['Age'] == '18+ yrs')][['Area Code','Value']]
+
             else:
                 df2 = df.loc[(df['Area Type'] == 'GP') & (df['Time period'] == tp)][['Area Code','Value']]
     
         ind_df[keys[i]] = ind_df.index.to_series().map(df2.set_index('Area Code')['Value'])
     
-    ind_df.columns = ['ccg']+depvar+['qof', 'imd', 'list_size', 'elderly_popn', 'health_cond', 'dep', 'new_dep']
+    ind_df.columns = ['ccg']+depvar+['rul','qof', 'imd', 'list_size', 'elderly_popn', 'health_cond', 'dep', 'new_dep']
+    
     
     print('ind_df done', end='\n')
     
@@ -614,7 +732,8 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
     desc_quint = quintile_summary(ind_df, depvar)   #doesnt assign nan to quintiles so don't need to dropna
     
     if save:
-        save_path = 'data_'+ystr+'/'
+        #save_path = 'data_'+ystr+'/'
+        save_path = 'data_covid/'
         
         filenames = ['data.pickle', 'exclude.pickle', 'Qdict.pickle', 'Cdict.pickle', 'listsize.pickle']
         files = [ind_df, exclude, Qdict, Cdict, listsize_gp]    
@@ -632,6 +751,51 @@ getData(2019, depvar=['items', 'actual_cost', 'quantity'], save=True, excl_amtt=
 results_dict = getData(2019, depvar=['items', 'actual_cost', 'quantity'], save=False, excl_amtt=True)
     
 [getData(i) for i in range(2017,2020)]
+
+def get_spec_drug(specdrug = ['vortioxetine'], var = 'qperc', df = ind_df, kgp = kgp,
+                  datelist = datelist, listsize_gp = listsize_gp, druglist = druglist, ystr = ystr):
+    
+    ndrug = len(druglist)
+    combined_array = np.zeros((len(kgp), ndrug))
+    
+    with open('data_2021/Qdict.pickle', 'rb') as f:
+        Qdict = pickle.load(f)
+
+    for k in range(len(kgp)):
+        qvar = Qdict[kgp[k]][2]
+        if var =='qperc':
+            if excl_amtt:
+                combined = np.sum(qvar)
+            else:
+                combined = np.sum(qvar[1:])
+            bydrug = (np.sum(qvar, axis=1)/combined)*100
+        else:
+            bydrug = np.nanmean(qvar, axis=1)
+        combined_array[k,:] = bydrug
+    
+    for n in range(ndrug):
+        drugname = druglist[n]
+        df[var] = combined_array[:,n]
+        output_file = drugname + ystr + '.csv'
+        df.to_csv(os.path.join('stata data\covid_quantity', output_file), index=True, index_label='gp')
+        
+    di = [2,10,21,31]
+    for d in di:
+        x = combined_array[:,d]
+        print(druglist[d], end=' ')
+        print('med:', np.nanmedian(x), end=' ')
+        print('IQR:', np.nanpercentile(x, [25,75]), end = '\n')
+
+
+def reformat_data(drugname, var = 'quantity'):
+    filename = os.path.join('stata data', drugname + '2021.csv')
+    data = pd.read_csv(filename)
+    data_all = pd.read_csv(os.path.join('stata data', 'data_2021.csv'))
+    data[var] = data[var]/data_all[var]
+    filename = os.path.join('stata data', drugname + '_perc_2021.csv')
+    data.to_csv(filename, index=True, index_label='gp')
+
+    
 
 def get_total_quantity(year, depvar=['item', 'actual_cost', 'quantity'], excl_amtt=True):
     with open('druglist.json', 'r') as f:
@@ -659,7 +823,7 @@ for i in range(2016,2021):
     total.append(get_total_quantity(i))
 
 #might not be necessary since nbrm ignores rows with nan
-def check_inddf(ind_df, keys):
+def check_inddf(ind_df, df2, keys):
     key1 = list(ind_df['ID'])
     key2 = list(df2['Area Code'])
     keyd = list(set(key1).symmetric_difference(set(key2)))
@@ -739,7 +903,8 @@ def preprocess_data_for_stata(year):
     for i in range(len(keys)):
         data[str(keys[i]+'_5')] = pd.qcut(data[keys[i]], 5, labels=False)
     
-    output_file = 'data_' + ystr + '.csv'
+    #output_file = 'data_' + ystr + '.csv'
+    output_file = 'data_covid' + '.csv'
     data.to_csv(os.path.join('stata data', output_file), index=True, index_label='gp')
 
 

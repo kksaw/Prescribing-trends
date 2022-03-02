@@ -15,7 +15,7 @@ Others: '0403040x0' where x = Z, Y, F, X, T, R, U, S, W, AB
 '''
 
 import json
-from main import getAPI
+from functions import getAPI
 
 druglist = []
 a = ['B', 'C', 'F', 'J', 'L', 'N', 'R', 'S', 'T', 'V', 'X', 'Y']
@@ -34,6 +34,11 @@ druglist.append('0403040'+d[-1])
     
 with open('druglist.json', 'w') as f:
     json.dump(druglist,f)
+    
+import csv
+with open('drugname.csv', mode='r') as f:
+    reader = csv.reader(f)
+    drugdict = {rows[0]:rows[1] for rows in reader}
 
 
 url = "https://openprescribing.net/api/1.0/org_details/?org_type=ccg&keys=total_list_size&format=json"
