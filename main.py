@@ -12,7 +12,11 @@ from datetime import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as ani
+import seaborn as sns
 from scipy.interpolate import interp1d
+from scipy.signal import savgol_filter
+from scipy.stats import linregress
+
 import geopandas as gpd
 import pandas as pd
 import fingertips_py as ftp
@@ -61,21 +65,46 @@ TIME SERIES by drug name -- ok
 1. Number of prescription/1000 popn
 2. Cost/1000 popn normalised with inflation
 3. (Maybe) quantity...? whatever this means..
+
+0 amitriptyline     1 amoxapine     2 clomipramine  3 dosulepin
+4 doxepin   5 imipramine    6 lofepramine   7 maprotiline
+8 mianserin     9 nortriptyline     10 trazodone    11 trimipramine
+
+12 isocarboxazide   13 moclobemide   14 phenelzine  15 tranylcypromine
+
+16 citalopram HBr   17 citalopram HCl   18 escitalopram     19 fluoxetine
+20 fluvoxamine  21 paroxetine   22 sertraline   
+
+23 agomelatine  24 duloxetine   25 flupentixol  26 mirtazapine 
+27 nefazodone   28 oxitriptan   29 reboxetine   30 tryptophan   
+31 venlafaxine  32 vortioxetine
 '''
-def plotTimeSeries(y, nmonths, xstart=2, ylabel='', title='', exclude_amtt=False):
-    x = np.arange(nmonths)
+
+df = pd.read_csv('1 time series/nQuantity.csv', index_col='date').apply(lambda x: x*1000).T
+nmonths = 60
+ylabel = 'Quantity prescribed per 1000 population'
+title = 'Quantity'
+
+def plotTimeSeries(df, nmonths, xstart=0, ylabel=ylabel, title=title, exclude_amtt=False):    
+    df_sum = df.sum(axis=1)
+    yhat = savgol_filter(df_sum, 31, 1)
+    linregress(np.arange(40),yhat[:40])
+    linregress(np.arange(20), yhat[40:])
+    
+
     ntca = 11 if exclude_amtt else 12        
     col = np.concatenate([fn.linear_gradient('#393b79', '#9c9ede', n=ntca)['hex'], 
                         fn.linear_gradient('#637939', '#cedb9c', n=4)['hex'],
                         fn.linear_gradient('#8c6d31', '#e7cd94', n=7)['hex'], 
                         fn.linear_gradient('#843c39', '#e7969c', n=10)['hex']])
-    labels = ['Mar 16', 'Jun 16', 'Sep 16', 'Dec 16',
-              'Mar 17', 'Jun 17', 'Sep 17', 'Dec 17',
-              'Mar 18', 'Jun 18', 'Sep 18', 'Dec 18',
-              'Mar 19', 'Jun 19', 'Sep 19', 'Dec 19',
-              'Mar 20', 'Jun 20', 'Sep 20', 'Dec 20']
+    labels = ['Dec 16', 'Mar 17', 'Jun 17', 'Sep 17', 
+              'Dec 17', 'Mar 18', 'Jun 18', 'Sep 18', 
+              'Dec 18', 'Mar 19', 'Jun 19', 'Sep 19', 
+              'Dec 19', 'Mar 20', 'Jun 20', 'Sep 20', 
+              'Dec 20', 'Mar 21', 'Jun 21', 'Sep 21']
     xticks = np.arange(xstart,nmonths,3)
     if exclude_amtt:
+        df = df.iloc[:,1:]
         legends = ['_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', 'TCAs', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', 
                    '_nolegend_', '_nolegend_', 'MAOIs', '_nolegend_', 
                    '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', 'SSRIs', '_nolegend_', '_nolegend_',
@@ -87,14 +116,64 @@ def plotTimeSeries(y, nmonths, xstart=2, ylabel='', title='', exclude_amtt=False
                    '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', 'Others', '_nolegend_', '_nolegend_', '_nolegend_', '_nolegend_', ]
 
     fig, ax = plt.subplots(1, figsize=(15,8))
-    ax.stackplot(x,y, colors=col, labels=legends)
+    df.plot(kind='bar', stacked=True, color=col, ax=ax)
     ax.set_xticks(xticks)
     ax.set_xticklabels(labels, rotation=45)
     ax.set_xlabel('Date')
     ax.set_ylabel(ylabel)
+    ax.set_ylim(0,4000)
     ax.set_title(title)
-    ax.legend(loc='upper left')
-    fig.savefig(str("1 time series/"+ylabel+".png"))
+    ax.legend(legends, loc='upper left')
+    ax.plot(yhat, 'k--')
+    
+    fig.savefig(str("1 time series/"+title+".png"))
+    
+df2 = pd.read_csv('1 time series/nQuantity_percentage.csv', index_col='date').apply(lambda x: x*100).T
+def plotTimeSeries_anim(df2):
+    def prepare_data(df, steps=5):
+        df2 = df.reset_index().rename(columns={'index':'date'})
+        df2.index = df2.index*steps
+        df_expanded  = df2.reindex(range(df2.index[-1] + 1))
+        df_expanded['date'] = df_expanded['date'].fillna(method='ffill')
+        df_expanded = df_expanded.set_index('date')
+        df_rank_expanded = df_expanded.rank(axis=1, method='first')
+        df_expanded = df_expanded.interpolate()
+        df_rank_expanded = df_rank_expanded.interpolate()
+        return df_expanded, df_rank_expanded
+    
+    def nice_axes(ax):
+        ax.set_facecolor('.8')
+        ax.tick_params(labelsize=8, length=0)
+        ax.grid(True, axis='x', color='white')
+        ax.set_axisbelow(True)
+        [spine.set_visible(False) for spine in ax.spines.values()]
+        
+    def init():
+        ax.clear()
+        nice_axes(ax)
+        ax.set_ylim(.2, 33)
+    
+    def update(i):
+        for bar in ax.containers:
+            bar.remove()
+        y = df_rank_expanded.iloc[i]
+        width = df_expanded.iloc[i]
+        ax.barh(y=y, width=width, color=col, tick_label=labels)
+        date_str = df_expanded.index[i]
+        ax.set_title(f'Percentage of all antidepressants prescribed - {date_str}', fontsize='smaller')
+
+    df_expanded, df_rank_expanded = prepare_data(df2) 
+    labels = df_expanded.columns        
+    col = np.concatenate([fn.linear_gradient('#393b79', '#9c9ede', n=11)['hex'], 
+                        fn.linear_gradient('#637939', '#cedb9c', n=4)['hex'],
+                        fn.linear_gradient('#8c6d31', '#e7cd94', n=7)['hex'], 
+                        fn.linear_gradient('#843c39', '#e7969c', n=10)['hex']])
+    
+    fig, ax = plt.subplots(1, figsize=(7,8), dpi=144)
+    anim = ani.FuncAnimation(fig=fig, func=update, init_func=init,
+                             frames=len(df_expanded), interval=100, repeat=False)    
+    anim.save('1 time series/anim2.gif')
+
 
 def plotSeasonalVariation(y, ylabel='', title=''):
     ysum = np.sum(y, axis=0)
@@ -219,7 +298,7 @@ CCG PROFILE
 
 how to deal with mergers before 2020, ignore and use current ones?
 '''
-
+    
 def plotCcgPerf(column, map_df, timeperiod):
     fig, ax = plt.subplots(1, figsize=(10,10))
     map_df.plot(column=column, cmap='Blues', scheme='QUANTILES', k=5, linewidth=0.5, ax=ax, edgecolor='0.1', legend=True)
@@ -237,12 +316,7 @@ def ccg_profile():
     
     with open('ccgdict.json', 'r') as f:
         ccgdict = json.load(f)
-    
-    fp = "CCG_boundaries\Clinical_Commissioning_Groups__April_2020__EN_BUC.shp"
-    map_df = gpd.read_file(fp)
-    map_df['ccg20nm'] = map_df['ccg20nm'].str.upper()
-    map_df['ccgid'] = map_df['ccg20nm'].map(ccgdict)
-    
+        
     url = "https://openprescribing.net/api/1.0/org_details/?org_type=ccg&keys=total_list_size&format=json"
     data = fn.getAPI(url)
     listsize_ccg = {}
@@ -263,14 +337,35 @@ def ccg_profile():
                                 'spending':b, 'spending_norm':b/ls,
                                 'quantity':c, 'quantity_norm':c/ls})
         
-    #n months average [items, spending, quantity, list size]
+    with open('2 geographical variation/by_ccgs_general.pickle', 'wb') as f:
+        pickle.dump(by_ccgs_general, f)
+
+    by_ccgs_dict = {}
+    for sub in by_ccgs_general:
+        by_ccgs_dict[sub['id']] = sub['quantity_norm']
+
+    fp = "CCG_boundaries\Clinical_Commissioning_Groups__April_2020__EN_BUC.shp"
+    map_df = gpd.read_file(fp)
+    map_df['ccg20nm'] = map_df['ccg20nm'].str.upper()
+    map_df['ccgid'] = map_df['ccg20nm'].map(ccgdict)
+    # index- which month: first month is May 2017
+    map_df['quantity'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][0][index])
+    
+    
+    #NOT USING THIS ANYMORE: n months average [items, spending, quantity, list size]
     n = 6
     by_ccgs_dict = {}
     for sub in by_ccgs_general:
+        by_ccgs_dict[sub['id']] = [ np.sum(sub['quantity_norm'][45:57]),
+                                   np.sum(np.array(listsize_ccg[sub['id']])[45:57]) ]    
+            
         by_ccgs_dict[sub['id']] = [ np.mean(sub['items_norm'].reshape(-1,n),axis=1),
                                     np.mean(sub['spending_norm'].reshape(-1,n),axis=1),
                                     np.mean(sub['quantity_norm'].reshape(-1,n),axis=1),
                                     np.mean(np.array(listsize_ccg[sub['id']]).reshape(-1,n),axis=1)]    
+        
+        
+    map_df['quantity'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][0])
     
     index = -1      #which months/years?
     map_df['items'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][0][index])
@@ -289,22 +384,104 @@ def ccg_profile():
         
 ccg_profile()
 
+'''not done'''
+def LAD_profile():
+    drugcode = "0403"
+    
+    with open('ccgdict.json', 'r') as f:
+        ccgdict = json.load(f)
+    
+    fp = "LAD_boundaries\LAD_MAY_2021_UK_BFE_V2.shp"
+    map_df = gpd.read_file(fp)
+    map_df['ccg20nm'] = map_df['ccg20nm'].str.upper()
+    map_df['ccgid'] = map_df['ccg20nm'].map(ccgdict)
+    
+    url = "https://openprescribing.net/api/1.0/org_details/?org_type=ccg&keys=total_list_size&format=json"
+    data = fn.getAPI(url)
+    listsize_ccg = {}
+    for sub in data:
+        if sub['row_id'] in listsize_ccg:
+            listsize_ccg[sub['row_id']].append(sub['total_list_size'])
+        else:
+            listsize_ccg[sub['row_id']] = [sub['total_list_size']]
+    
+    by_ccgs_general = []
+    for CCGid in list(listsize_ccg.keys()):
+        url = "https://openprescribing.net/api/1.0/spending_by_ccg/?code=" + drugcode + "&org=" + CCGid + "&format=json"
+        data = fn.getAPI(url)
+        ls = np.array(listsize_ccg[CCGid])
+        a = [sub['quantity'] for sub in data]
+        by_ccgs_general.append({'id':CCGid, 'name':data[0]['row_name'], 
+                                'quantity':a, 'quantity_norm':a/ls})
+
+    by_ccgs_dict = {}
+    nstart = 45
+    for sub in by_ccgs_general:
+        by_ccgs_dict[sub['id']] = [np.sum(sub['quantity_norm'][nstart:nstart+12]),
+                                   np.sum(sub['quantity'][nstart:nstart+12])/1000,
+                                   np.mean(np.array(listsize_ccg[sub['id']])[nstart:nstart+12]) ]       
+        
+    map_df['quantity_norm'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][0])
+    map_df['quantity_popn'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][1])
+    
+    
+    index = -1      #which months/years?
+    map_df['items'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][0][index])
+    map_df['spending'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][1][index])
+    map_df['quantity'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][2][index])
+    map_df['list_size'] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][3][index])
+    
+    timeperiod = ['2016 Q1', '2016 Q2', '2016 Q3', '2016 Q4',
+                  '2017 Q1', '2017 Q2', '2017 Q3', '2017 Q4',
+                  '2018 Q1', '2018 Q2', '2018 Q3', '2018 Q4',
+                  '2019 Q1', '2019 Q2', '2019 Q3', '2019 Q4',
+                  '2020 Q1', '2020 Q2', '2020 Q3', '2020 Q4']
+
+    for column in ['items', 'spending', 'quantity', 'list_size']:
+        plotCcgPerf(column, map_df, timeperiod)
+
+
 '''by drugtype'''
 def map_date(datestr, firstdate=datetime(2016,1,1)):
     d1 = firstdate
     d2 = datetime.strptime(datestr,'%Y-%m-%d')
     return (d2.year - d1.year) * 12 + d2.month - d1.month
 
-def plotCcgPerf_anim(by_ccgs_dict, map_df, column, ind, timeperiod):
+year = 2017
+def get_CCG_quantity(year):
+    ystr = str(year)
+    with open(str('data_' + ystr + '/Qdict.pickle'), 'rb') as f:
+        Qdict = pickle.load(f)
+    with open(str('data_' + ystr + '/listsize.pickle'), 'rb') as f:
+        listsize = pickle.load(f)
+    with open(str('data_' + ystr + '/Cdict.pickle'), 'rb') as f:
+        Cdict = pickle.load(f)
+    Qnorm = {}
+    byCCG = {}
+    for key, value in Qdict.items():
+        quantity_norm = sum(value[2])/listsize[key]
+        curr_ccg = Cdict[key]
+        if curr_ccg in byCCG:
+            byCCG[curr_ccg] += quantity_norm
+        else:
+            byCCG[curr_ccg] = quantity_norm
+    return byCCG
+
+def plotCcgPerf_anim(byCCG, map_df, timeperiod, column='quantity'):
     fig, ax = plt.subplots(1, figsize=(10,10))
+    
     def plotMap(i):
-        ax.clear()
-        ax.axis('off')
-        map_df[column] = map_df['ccgid'].map(lambda x: by_ccgs_dict[x][ind][i])
-        ax.set_title(str("CCG " + column + ' ' + timeperiod[i]))
-        map_df.plot(column=column, cmap='Blues', scheme='QUANTILES', k=5, linewidth=0.5, ax=ax, edgecolor='0.1', legend=True)
-        
-    animator = ani.FuncAnimation(fig, plotMap, interval=20)
+        n=0
+        while n<5:
+            ax.clear()
+            ax.axis('off')
+            map_df[column] = map_df['ccgid'].map(lambda x: byCCG[x][i])
+            ax.set_title(str("CCG " + column + ' ' + timeperiod[i]))
+            map_df.plot(column=column, cmap='Blues', scheme='QUANTILES', k=5, linewidth=0.5, ax=ax, edgecolor='0.1', legend=True)
+            n+=1
+            
+    animator = ani.FuncAnimation(fig, plotMap, frames = len(timeperiod)*5, repeat = False)
+    
     writergif = ani.PillowWriter(fps=5) 
     save_path = '2 geographical variation/'
     if not os.path.exists(save_path):
@@ -312,12 +489,40 @@ def plotCcgPerf_anim(by_ccgs_dict, map_df, column, ind, timeperiod):
     filename=os.path.join(save_path,str(column+'.gif'))
     animator.save(filename, writer=writergif)
     
-def plotCcgHist(by_ccgs_dict, cols, ind, timeperiod):
+byCCG = get_CCG_quantity(2018)
+byCCG_all = dict.fromkeys(byCCG, np.zeros(0))
+for year in [2018, 2019, 2020, 2021]:
+    temp = get_CCG_quantity(year)
+    for key, value in temp.items():
+        byCCG_all[key] = np.append(byCCG_all[key], value)
+with open('2 geographical variation/byCCG_all.pickle', 'wb') as f:
+    pickle.dump(byCCG_all, f)
+
+with open('2 geographical variation/byCCG_all.pickle', 'rb') as f:
+    byCCG_all = pickle.load(f)
+
+with open('ccgdict.json', 'r') as f:
+    ccgdict = json.load(f)
+    
+    
+fp = "CCG_boundaries\Clinical_Commissioning_Groups_(April_2021)_EN_BUC.shp"
+map_df = gpd.read_file(fp)
+map_df['CCG21NM'] = map_df['CCG21NM'].str.upper()
+map_df['ccgid'] = map_df['CCG21NM'].map(ccgdict)
+
+timeperiod = ['Jan-18', 'Feb-18', 'Mar-18', 'Apr-18', 'May-18', 'Jun-18', 'Jul-18', 'Aug-18', 'Sep-18', 'Oct-18', 'Nov-18', 'Dec-18', 
+              'Jan-19', 'Feb-19', 'Mar-19', 'Apr-19', 'May-19', 'Jun-19', 'Jul-19', 'Aug-19', 'Sep-19', 'Oct-19', 'Nov-19', 'Dec-19', 
+              'Jan-20', 'Feb-20', 'Mar-20', 'Apr-20', 'May-20', 'Jun-20', 'Jul-20', 'Aug-20', 'Sep-20', 'Oct-20', 'Nov-20', 'Dec-20', 
+              'Jan-21', 'Feb-21', 'Mar-21', 'Apr-21', 'May-21', 'Jun-21', 'Jul-21', 'Aug-21', 'Sep-21', 'Oct-21', 'Nov-21', 'Dec-21']
+
+plotCcgPerf_anim(byCCG_all, map_df, timeperiod, column='quantity')
+    
+def plotCcgHist(ccgdict, cols, ind, timeperiod):
     a = []
     fig, axs = plt.subplots(2,2, figsize=(12,10))
     axs = axs.ravel()
     for i in range(4):
-        a.append(axs[i].hist([row[i][-1] for row in list(by_ccgs_dict.values())], bins=15))
+        a.append(axs[i].hist([row[i][-1] for row in list(ArithmeticErrorccgdict.values())], bins=15))
         axs[i].set_xlabel(cols[i])
         axs[i].set_ylabel("Number of CCGs")
     fig.suptitle(str("CCG histogram " + timeperiod[ind]))
@@ -546,7 +751,7 @@ def check_Qdict(Qdict):
     print("Potential GP closures: %d" %(len(ind)), end='\n')
     return np.array((ind, nzero))
 
-def get_ruralInd(L2C2021='2 model/LAD_to_CCG_2021.csv', L2R2011='2 model/LAD_rurality_2011.ods'):
+def get_ruralInd(L2C2021='LAD_rurality/LAD_to_CCG_2021.csv', L2R2011='LAD_rurality/LAD_rurality_2011.ods'):
     ladCcg = pd.read_csv(L2C2021)
     ccg_to_lad = ladCcg.groupby('CCG21CDH').LAD21CD.apply(list).to_dict()     
     for key, value in ccg_to_lad.items():
@@ -595,18 +800,13 @@ def get_ruralInd(L2C2021='2 model/LAD_to_CCG_2021.csv', L2R2011='2 model/LAD_rur
 # need to adjust for inflation?? since it's only within 1 year. if adjust_inflation==True, adjust with ref to 2016
 year=2021
 def getData(year, depvar=['items', 'actual_cost', 'quantity'], 
-            save=True, excl_amtt=True, adjust_inflation=False,
-            dropna=False):
+            save=True, save_path='', excl_amtt=True, 
+            adjust_inflation=False, dropna=False):
     
     ystr=str(year)
     #datelist = ['01','02','03','04','05','06','07','08','09','10','11','12']
     
-    datelist = [ystr+'-'+x for x in ['01','02','03','04','05','06','07','08','09','10','11']]
-    datelist.insert(0,'2020-12')
-    
-    l1 = ['2020-' + x for x in ['03','04','05','06','07','08','09','10','11','12']]
-    l2 = ['2021-' + x for x in ['01','02','03','04','05','06','07','08','09','10','11']]
-    datelist = l1+l2
+    datelist = [ystr+'-'+x for x in ['01','02','03','04','05','06','07','08','09','10','11', '12']]
                 
     with open('druglist.json', 'r') as f:
         druglist = json.load(f)
@@ -615,11 +815,11 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
     else:
         [druglist.remove(x) for x in ['0403030Y0']];
         
-    with open('CPI_index.pickle', 'rb') as f:
-        cpi_index = pickle.load(f)    
-    cpi_index = np.array([x/cpi_index[0] for x in cpi_index])
-    ind = np.arange(0,12)+((year-2016)*12)
-    cpi_index = cpi_index[ind]
+    #with open('CPI_index.pickle', 'rb') as f:
+    #    cpi_index = pickle.load(f)    
+    #cpi_index = np.array([x/cpi_index[0] for x in cpi_index])
+    #ind = np.arange(0,12)+((year-2016)*12)
+    #cpi_index = cpi_index[ind]
     
     if year>2015:
         imd_year=2019
@@ -688,7 +888,7 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
     Mdict = {k : np.zeros(3) for k in kgp}
     for key, value in Qdict.items():
         norm_value = (value/listsize_gp[key])*1000
-        norm_value[1] = norm_value[1]/cpi_index if adjust_inflation else norm_value[1]            
+        #norm_value[1] = norm_value[1]/cpi_index if adjust_inflation else norm_value[1]            
         Mdict[key] = np.nanmean(norm_value, axis=(1,2))
         
     z = check_Qdict(Qdict)      #remove??
@@ -731,10 +931,7 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
     desc_stat = summary(ind_df, depvar, dropna=dropna)
     desc_quint = quintile_summary(ind_df, depvar)   #doesnt assign nan to quintiles so don't need to dropna
     
-    if save:
-        #save_path = 'data_'+ystr+'/'
-        save_path = 'data_covid/'
-        
+    if save:        
         filenames = ['data.pickle', 'exclude.pickle', 'Qdict.pickle', 'Cdict.pickle', 'listsize.pickle']
         files = [ind_df, exclude, Qdict, Cdict, listsize_gp]    
         fn.savepickle(save_path, filenames, files)
@@ -747,13 +944,14 @@ def getData(year, depvar=['items', 'actual_cost', 'quantity'],
         return {'data': ind_df, 'exclude': exclude, 'Qdict': Qdict, 'Cdict': Cdict, 
                 'listsize': listsize_gp, 'summary': desc_stat, 'quintile_summary': desc_quint}
 
-getData(2019, depvar=['items', 'actual_cost', 'quantity'], save=True, excl_amtt=True)
-results_dict = getData(2019, depvar=['items', 'actual_cost', 'quantity'], save=False, excl_amtt=True)
+getData(2019, depvar=['items', 'actual_cost', 'quantity'], save=True, save_path='data_2019', excl_amtt=True)
+results_dict = getData(2019, depvar=['items', 'actual_cost', 'quantity'], save=False, save_path='data_2019', excl_amtt=True)
     
 [getData(i) for i in range(2017,2020)]
 
 def get_spec_drug(specdrug = ['vortioxetine'], var = 'qperc', df = ind_df, kgp = kgp,
-                  datelist = datelist, listsize_gp = listsize_gp, druglist = druglist, ystr = ystr):
+                  datelist = datelist, listsize_gp = listsize_gp, druglist = druglist, ystr = ystr, 
+                  excl_amtt = True):
     
     ndrug = len(druglist)
     combined_array = np.zeros((len(kgp), ndrug))
@@ -897,14 +1095,50 @@ def preprocess_data_for_stata(year):
     ystr = str(year)
     keys = ['qof', 'imd', 'list_size', 'elderly_popn', 'health_cond', 'dep', 'new_dep']
     
+    def jitter(a_series, noise_reduction=1000000):
+        return (a_series + np.random.random(len(a_series))*a_series.std()/noise_reduction)-(a_series.std()/(2*noise_reduction))
+
     input_file = 'data_' + ystr + '/data.pickle'
     with open(input_file, 'rb') as f:
         data = pickle.load(f)
+        
+    data['rul_5'] = pd.qcut(jitter(data['rul']), 5, labels=False)
     for i in range(len(keys)):
         data[str(keys[i]+'_5')] = pd.qcut(data[keys[i]], 5, labels=False)
     
     #output_file = 'data_' + ystr + '.csv'
-    output_file = 'data_covid' + '.csv'
+    output_file = 'data_' + ystr + '.csv'
     data.to_csv(os.path.join('stata data', output_file), index=True, index_label='gp')
 
+    
+def plot_groupedBar(var):
+    input_file = '3 associated factors/' + var + '.csv'
+    df = pd.read_csv(input_file)
+    
+    years = set(df['year'])
+    n = len(years)
+    ind = np.arange(5)
+    width = 0.15
+    
+    fig, ax = plt.subplots(figsize=(8,6))
+    cols = sns.color_palette("Set2",n)
+    for i in range(len(years)):
+        ax.plot(ind+width*i, df[i*5:(i+1)*5]['IRR'], color = cols[i], marker = 'o', ls = 'none')
+        ax.errorbar(ind+width*i, df[i*5:(i+1)*5]['IRR'], color = cols[i],
+               yerr = df[i*5:(i+1)*5]['CI2'] - df[i*5:(i+1)*5]['CI1'], ls='none')
+        
+    ax.set_xlabel('Quintile')
+    ax.set_xticks(ind + width*2)
+    ax.set_xticklabels(['Q1', 'Q2', 'Q3', 'Q4', 'Q5'])
+
+    ax.set_ylabel('IRR')
+    ax.set_ylim(0.8,1.55)
+    ax.axhline(1, color='grey', linewidth=1)
+    
+    ax.set_title(var)
+    fig.savefig(str('3 associated factors/' + var + '_bar.png'))
+    
+keys = ['rul', 'qof', 'imd', 'list_size', 'elderly_popn', 'health_cond', 'dep']
+for v in keys:
+    plot_groupedBar(v)
 
